@@ -1,0 +1,20 @@
+Snoofeeder
+==========
+
+Bot that mirrors rss/atom feed to given subreddit.
+
+
+Install Dependencies
+--------------------
+
+  pip install -r requirements.txt
+
+
+Usage
+-----
+
+
+
+Licence
+-------
+GPLv3
