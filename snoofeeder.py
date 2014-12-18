@@ -7,16 +7,16 @@ Licensed under the GNU GPL Licence v3.
 
 http://github.com/RobSis/snoofeeder
 """
+
 import praw
 import feedparser
-import json
 from optparse import OptionParser, OptionGroup
 import sys
 import os
+import json
 import pickle as _pickle
 import logging
 import time
-
 
 SNOOFEEDER_VERSION = '0.1'
 """
@@ -39,8 +39,24 @@ A string describing the script.
 @type: string
 """
 
+USER_CONFIGS_HOME = os.path.expanduser('~/.snoofeeder')
+"""
+The location where the pickles and configurations are stored.
 
-logging.basicConfig(level=logging.INFO)
+@type: string
+"""
+
+USER_AGENT = 'snoofeeder /u/%s'
+"""
+The user agent of the bot. The string will be replaced with username
+from configfile.
+
+@type: string
+"""
+
+
+logging_level = logging.WARN
+logging.basicConfig(level=logging_level)
 logger = logging.getLogger("snoofeeder")
 """
 Register logger.
@@ -56,7 +72,7 @@ The parser used to handle command line arguments.
 """
 
 
-def handle_command_line_verbosity_option(option, opt, value, parser):
+def verbosity_handler(option, opt, value, parser):
     """
     Handle a command line option increasing the logger verbosity.
 
@@ -71,7 +87,10 @@ def handle_command_line_verbosity_option(option, opt, value, parser):
     @rtype: void
     """
     # Decrease the logger level.
-    logger.setLevel(logger.level - 10)
+    global logging_level
+    logging_level -= 10
+    logger.setLevel(logging_level)
+
 
 def load_config(config):
     """
@@ -82,12 +101,29 @@ def load_config(config):
     @return: config dictionary
     @rtype: dict
     """
+    logger.debug('Processing config file ' + config)
     with open(config) as f:
         json_data = f.read()
         return json.loads(json_data)
 
 
-def load_submitted(pickle):
+def get_configs(path):
+    """
+    Load all non-pickle files from given folder.
+
+    @param: path: path to search in
+    @type: path: str
+    @return: config paths
+    @rtype: [str]
+    """
+    config_files = []
+    for config_file in os.listdir(path):
+        if not config_file.endswith('pickle'):
+            config_files.append(path + "/" + config_file)
+    return config_files
+
+
+def load_pickle(pickle):
     """
     Load pickled list with already processed urls.
 
@@ -96,20 +132,27 @@ def load_submitted(pickle):
     @return: list of already processed urls
     @rtype: [str]
     """
+    logger.debug('Loading list of already submitted from pickle ' + pickle)
     if (os.path.isfile(pickle)):
         return _pickle.load(open(pickle, 'rb'))
     else:
         return []
 
 
-def save_submitted(pickle, submitted):
+def save_pickle(pickle, submitted):
     """
     Pickle the list with already processed urls.
 
     @param: pickle: path of file with pickle
     @type: pickle: string
+    @param: submitted: list of already processed urls
+    @type: submitted: [str]
     """
-    with open(pickle,'w') as f:
+    logger.debug('Saving list of already submitted to pickle ' + pickle)
+    dirname = os.path.dirname(pickle)
+    if (not os.path.exists(dirname)):
+        os.makedirs(dirname)
+    with open(pickle, 'w') as f:
         _pickle.dump(submitted, f)
 
 
@@ -143,67 +186,77 @@ def main():
                          action="append",
                          dest="config",
                          type="string",
-                         help="Load a config file.")
+                         help="load a config file. Can be used multiple times.")
+    optParser.add_option("-o",
+                         "--output",
+                         dest="output",
+                         type="string",
+                         help="output directory. Default is ~/.snoofeeder")
     optParser.add_option("-v",
                          "--verbose",
                          action="callback",
-                         callback=handle_command_line_verbosity_option,
-                         help="Turn on verbose mode.")
+                         callback=verbosity_handler,
+                         help="increase verbosity level. Can be called multiple times.")
 
     # Parse command line options.
     (options, args) = optParser.parse_args()
 
-    # If configs passed, process them.
+    output_directory = USER_CONFIGS_HOME
+    if options.output:
+        output_directory = os.path.expanduser(options.output)
+
+    feeds = []
+    # If configs passed, process them,
     if options.config:
-        for config in options.config:
-            config_file = locate_config(config)
-            if config_file:
-                logger.debug("Config '%s' located at '%s'.", config, config_file)
-                process_config(config_file,options)
-            else:
-                logger.error("Could not locate the config '%s'.", config)
+        for config_file in options.config:
+            feeds.append((os.path.basename(config_file), config_file))
     else:
-        # find config in default location
-        pass
+        # otherwise find config in default location.
+        for config_file in get_configs(output_directory):
+            feeds.append((os.path.basename(config_file), config_file))
 
-    config = load_config('config.json')
-    submitted = load_submitted('submitted.pickle')
-    to_submit = []
+    if not feeds:
+        logger.error("No feeds to process.")
+        return 2
 
-    try:
-        # get praw object
-        reddit = praw.Reddit(user_agent='snoofeeder /u/%s' % config['username'])
-        reddit.login(config['username'], config['password'])
-        sub = reddit.get_subreddit(config['subreddit'])
+    for feed in feeds:
+        name = feed[0]
+        config = load_config(feed[1])
+        pickle_path = output_directory + "/" + name + '.pickle'
+        to_submit = []
+        already_submitted = load_pickle(pickle_path)
+        try:
+            # Collect new posts from feed.
+            entries = get_feed(config['feed_url'])
+            entries.reverse()
+            for entry in entries:
+                if entry['url'] not in already_submitted and entry['url'] not in to_submit:
+                    to_submit.append(entry)
 
-        # collect new posts from feed
-        entries = get_feed(config['feed_url'])
-        entries.reverse()
-        for entry in entries:
-            if entry['url'] not in submitted and entry['url'] not in to_submit:
-                to_submit.append(entry)
+            if to_submit:
+                # Get praw object.
+                reddit = praw.Reddit(user_agent=USER_AGENT % config['username'])
+                reddit.login(config['username'], config['password'])
+                sub = reddit.get_subreddit(config['subreddit'])
 
-                logger.debug('"' + entry['title'] + '" will be processed.')
+                # Post the entries.
+                for entry in to_submit:
+                    try:
+                        submission = subreddit.submit(title=entry['title'], url=entry['url'])
+                        already_submitted.append(entry['url'])
+                        logger.debug('"' + entry['title'] + '" submitted as ' + submission.short_link)
+                    except praw.errors.RateLimitExceeded:
+                        logger.warn('Rate limit exceeded. Waiting one minute.')
+                        time.sleep(60)
 
-        # post the entries
-        for entry in to_submit:
-            try:
-                submission = subreddit.submit(title=entry['title'], url=entry['url'])
-                submitted.append(entry['url'])
-
-                logger.info('"' + entry['title'] + '" submitted as ' + submission.short_link)
-            except praw.errors.RateLimitExceeded:
-                logger.warn('Rate limit exceeded. Waiting one minute.')
-                time.sleep(60)
-
-        save_submitted('submitted.pickle', submitted)
-        logger.info('Everything up to date.')
-
-    # Raise an error for any other exception.
-    except Exception as exc:
-        logger.error("%s", exc)
-        return 1
+                save_pickle(pickle_path, already_submitted)
+        # Raise an error for any other exception.
+        except Exception as exc:
+            logger.error("%s", exc)
+            return 1
+    logger.info('Everything up to date.')
     return 0
+
 
 if __name__ == '__main__':
     sys.exit(main())

@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# -*- coding: utf-8-*-
 import os
 from distutils.core import setup
 
@@ -9,6 +10,7 @@ setup(name='snoofeeder',
       url='http://github.com/RobSis/snoofeeder',
       author='http://github.com/RobSis',
       author_email='siska.robert@gmail.com',
+      keywords = "reddit rss atom feed bot",
+
       license='GPLv3',
-      scripts=['snoofeeder.py']
-)
+      scripts=['snoofeeder.py'])
