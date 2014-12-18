@@ -18,7 +18,7 @@ import pickle as _pickle
 import logging
 import time
 
-SNOOFEEDER_VERSION = '0.1'
+SNOOFEEDER_VERSION = '1.0'
 """
 The script version number.
 
