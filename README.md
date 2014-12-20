@@ -1,7 +1,7 @@
 Snoofeeder
 ==========
 
-Bot that mirrors rss/atom feed to given subreddit.
+Bot that mirrors rss/atom feeds to given subreddits.
 
 
 Install dependencies
