@@ -57,14 +57,14 @@ from configfile.
 
 logging_level = logging.WARN
 logging.basicConfig(level=logging_level)
-logger = logging.getLogger("snoofeeder")
+logger = logging.getLogger('snoofeeder')
 """
 Register logger.
 
 @entrype: Logger
 """
 
-optParser = OptionParser(usage=USAGE, version="%prog " + SNOOFEEDER_VERSION, description=DESCRIPTION)
+optParser = OptionParser(usage=USAGE, version='%prog ' + SNOOFEEDER_VERSION, description=DESCRIPTION)
 """
 The parser used to handle command line arguments.
 
@@ -185,22 +185,22 @@ def main():
     optParser.formatter.width = 150
 
     # Register the command line options.
-    optParser.add_option("-c",
-                         "--config",
-                         action="append",
-                         dest="config",
-                         type="string",
-                         help="load a config file. Can be used multiple times.")
-    optParser.add_option("-o",
-                         "--output",
-                         dest="output",
-                         type="string",
-                         help="output directory. Default is ~/.snoofeeder")
-    optParser.add_option("-v",
-                         "--verbose",
-                         action="callback",
+    optParser.add_option('-c',
+                         '--config',
+                         action='append',
+                         dest='config',
+                         type='string',
+                         help='load a config file. Can be used multiple times.')
+    optParser.add_option('-o',
+                         '--output',
+                         dest='output',
+                         type='string',
+                         help='output directory. Default is ~/.snoofeeder')
+    optParser.add_option('-v',
+                         '--verbose',
+                         action='callback',
                          callback=verbosity_handler,
-                         help="increase verbosity level. Can be called multiple times.")
+                         help='increase verbosity level. Can be called multiple times.')
 
     # Parse command line options.
     (options, args) = optParser.parse_args()
@@ -224,12 +224,12 @@ def main():
             feeds.append((os.path.basename(config_file), config))
 
     if not feeds:
-        logger.error("No feeds to process.")
+        logger.error('No feeds to process.')
         return 2
 
     for feed in feeds:
         name, config = feed
-        pickle_path = output_directory + "/" + name + '.pickle'
+        pickle_path = output_directory + '/' + name + '.pickle'
         to_submit = []
         already_submitted = load_pickle(pickle_path)
         try:
@@ -259,7 +259,7 @@ def main():
                 save_pickle(pickle_path, already_submitted)
         # Raise an error for any other exception.
         except Exception as exc:
-            logger.error("%s", exc)
+            logger.error('%s', exc)
             return 1
     logger.info('Everything up to date.')
     return 0
