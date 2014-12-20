@@ -104,7 +104,11 @@ def load_config(config):
     logger.debug('Processing config file ' + config)
     with open(config) as f:
         json_data = f.read()
-        return json.loads(json_data)
+        try:
+            return json.loads(json_data)
+        except ValueError:
+            logger.debug('Skipping non-valid json file ' + config)
+            return None
 
 
 def get_configs(path):
@@ -206,22 +210,25 @@ def main():
         output_directory = os.path.expanduser(options.output)
 
     feeds = []
+    config_set = []
     # If configs passed, process them,
     if options.config:
-        for config_file in options.config:
-            feeds.append((os.path.basename(config_file), config_file))
+        config_set = options.config
     else:
         # otherwise find config in default location.
-        for config_file in get_configs(output_directory):
-            feeds.append((os.path.basename(config_file), config_file))
+        config_set = get_configs(output_directory)
+
+    for config_file in config_set:
+        config = load_config(config_file)
+        if config:
+            feeds.append((os.path.basename(config_file), config))
 
     if not feeds:
         logger.error("No feeds to process.")
         return 2
 
     for feed in feeds:
-        name = feed[0]
-        config = load_config(feed[1])
+        name, config = feed
         pickle_path = output_directory + "/" + name + '.pickle'
         to_submit = []
         already_submitted = load_pickle(pickle_path)
