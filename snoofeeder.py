@@ -72,6 +72,29 @@ The parser used to handle command line arguments.
 """
 
 
+def insort(a, x, cmp=cmp):
+    """
+    Insort x to a through bisection with given comparison function.
+
+    @param a: the list of items
+    @type a: [object]
+    @param x: the object to be insorted
+    @type x: object
+    @param cmp: the comparison function on objects
+    @type cmp: lambda
+    @return: the list with object insorted
+    @rtype: [object]
+    """
+    lo, hi = 0, len(a)
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if cmp(x, a[mid]) < 0:
+            hi = mid
+        else:
+            lo = mid + 1
+    return a.insert(lo, x)
+
+
 def verbosity_handler(option, opt, value, parser):
     """
     Handle a command line option increasing the logger verbosity.
@@ -84,7 +107,6 @@ def verbosity_handler(option, opt, value, parser):
     @type value: string
     @param parser: the OptionParser instance.
     @type parser: OptionParser
-    @rtype: void
     """
     # Decrease the logger level.
     global logging_level
@@ -160,19 +182,6 @@ def save_pickle(pickle, submitted):
         _pickle.dump(submitted, f)
 
 
-def get_feed(url):
-    """
-    Return all the entries of given feed in (url, title) tuple.
-
-    @param url: url of the feed
-    @type url: str
-    @return: (url, title) tuple.
-    @rtype: (str, str)
-    """
-    feed = feedparser.parse(url)
-    return [{'url': x.link, 'title': x.title} for x in feed.entries]
-
-
 def main():
     """
     Snoofeeder program entry point.
@@ -203,13 +212,13 @@ def main():
                          help='increase verbosity level. Can be called multiple times.')
 
     # Parse command line options.
-    (options, args) = optParser.parse_args()
+    options, args = optParser.parse_args()
 
     output_directory = USER_CONFIGS_HOME
     if options.output:
         output_directory = os.path.expanduser(options.output)
 
-    feeds = []
+    configurations = []
     config_set = []
     # If configs passed, process them,
     if options.config:
@@ -219,51 +228,57 @@ def main():
         config_set = get_configs(output_directory)
 
     for config_file in config_set:
-        config = load_config(config_file)
-        if config:
-            feeds.append((os.path.basename(config_file), config))
+        config_json = load_config(config_file)
+        if config_json:
+            configurations.append((os.path.basename(config_file), config_json))
 
-    if not feeds:
-        logger.error('No feeds to process.')
+    if not configurations:
+        logger.error('No configurations to process.')
         return 2
 
-    for feed in feeds:
-        name, config = feed
+    for configuration in configurations:
+        name, config = configuration
         pickle_path = output_directory + '/' + name + '.pickle'
         to_submit = []
         already_submitted = load_pickle(pickle_path)
-        try:
-            # Collect new posts from feed.
-            entries = get_feed(config['feed_url'])
-            entries.reverse()
+
+        # Get all feeds from the configuration.
+        feeds = config['feed_url']
+        if type(feeds) is not list:
+            feeds = [feeds]
+
+        # Collect new posts from feed.
+        for feed in feeds:
+            entries = feedparser.parse(feed).entries
             for entry in entries:
-                if entry['url'] not in already_submitted and entry['url'] not in to_submit:
-                    to_submit.append(entry)
+                if entry.link not in already_submitted and entry.link not in to_submit:
+                    insort(to_submit, entry, lambda x, y: cmp(x.published_parsed, y.published_parsed))
 
-            if to_submit:
-                # Get praw object.
-                reddit = praw.Reddit(user_agent=USER_AGENT % config['username'])
-                reddit.login(config['username'], config['password'])
-                sub = reddit.get_subreddit(config['subreddit'])
+        if to_submit:
+            # Get praw object.
+            reddit = praw.Reddit(user_agent=USER_AGENT % config['username'])
+            reddit.login(config['username'], config['password'])
+            subreddit = reddit.get_subreddit(config['subreddit'])
 
-                # Post the entries.
-                for entry in to_submit:
-                    try:
-                        submission = subreddit.submit(title=entry['title'], url=entry['url'])
-                        already_submitted.append(entry['url'])
-                        logger.debug('"' + entry['title'] + '" submitted as ' + submission.short_link)
-                    except praw.errors.RateLimitExceeded:
-                        logger.warn('Rate limit exceeded. Waiting one minute.')
-                        time.sleep(60)
+            # Post the entries.
+            for entry in to_submit:
+                try:
+                    submission = subreddit.submit(title=entry['title'], url=entry.link)
+                    already_submitted.append(entry.link)
+                    logger.debug('"' + entry['title'] + '" submitted as ' + submission.short_link)
+                except praw.errors.RateLimitExceeded:
+                    logger.warn('Rate limit exceeded. Waiting one minute.')
+                    time.sleep(60)
 
-                save_pickle(pickle_path, already_submitted)
-        # Raise an error for any other exception.
-        except Exception as exc:
-            logger.error('%s', exc)
-            return 1
+            save_pickle(pickle_path, already_submitted)
     logger.info('Everything up to date.')
     return 0
 
 
 if __name__ == '__main__':
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    # Raise an error for any other exception.
+    except Exception as exc:
+        logger.error('%s', exc)
+        sys.exit(1)
