@@ -240,6 +240,7 @@ def main():
         name, config = configuration
         pickle_path = output_directory + '/' + name + '.pickle'
         to_submit = []
+        urls_to_submit = []
         already_submitted = load_pickle(pickle_path)
 
         # Get all feeds from the configuration.
@@ -251,8 +252,9 @@ def main():
         for feed in feeds:
             entries = feedparser.parse(feed).entries
             for entry in entries:
-                if entry.link not in already_submitted and entry.link not in to_submit:
+                if entry.link not in already_submitted and entry.link not in urls_to_submit:
                     insort(to_submit, entry, lambda x, y: cmp(x.published_parsed, y.published_parsed))
+                    urls_to_submit.append(entry.link)
 
         if to_submit:
             # Get praw object.
@@ -263,9 +265,9 @@ def main():
             # Post the entries.
             for entry in to_submit:
                 try:
-                    submission = subreddit.submit(title=entry['title'], url=entry.link)
+                    submission = subreddit.submit(title=entry.title, url=entry.link)
                     already_submitted.append(entry.link)
-                    logger.debug('"' + entry['title'] + '" submitted as ' + submission.short_link)
+                    logger.debug('"' + entry.title + '" submitted as ' + submission.short_link)
                 except praw.errors.RateLimitExceeded:
                     logger.warn('Rate limit exceeded. Waiting one minute.')
                     time.sleep(60)
