@@ -1,1 +1,1 @@
-include snoofeeder.py COPYING requirements.txt
+include snoofeeder.py requirements.txt README.md COPYING

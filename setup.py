@@ -6,7 +6,7 @@ from distutils.core import setup
 setup(name='snoofeeder',
       version='1.0',
       description='Mirror rss/atom feed to given subreddit',
-      long_description=open(os.path.join(os.path.dirname(__file__), 'README')).read(),
+      long_description=open(os.path.join(os.path.dirname(__file__), 'README.md')).read(),
       url='http://github.com/RobSis/snoofeeder',
       author='http://github.com/RobSis',
       author_email='siska.robert@gmail.com',
